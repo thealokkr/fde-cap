@@ -1,0 +1,17 @@
+{
+  "schema_version": 3,
+  "collection": "cloudserve_kb",
+  "source_path": "data/kb/documentation.json",
+  "source_sha256": "423c3fcdae9e589c0022ebe8121e01e56f92f40a9c1a3f8223727245bc8935fc",
+  "metadata_manifest_path": "data/kb/metadata_manifest.json",
+  "metadata_manifest_sha256": "c2ed259d56d61b0a534dddfac1b3769447a57eaf31e3bdd10f6bd239b0f56542",
+  "passage_records_sha256": "ec0af42ceb40a0e0d092f60ea970c0b24c98295367fbfde2a1109af7f489bfbc",
+  "chunker_version": "whole-article-v1",
+  "embedding_provider": "gemini",
+  "embedding_model": "gemini-embedding-001",
+  "embedding_dimensions": 768,
+  "distance_metric": "cosine",
+  "built_at_utc": "2026-11-15T10:11:44.018444+00:00",
+  "article_count": 29,
+  "passage_count": 29
+}
