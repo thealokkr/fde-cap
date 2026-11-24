@@ -224,6 +224,9 @@ _cloudserve_setup_main() {
     echo "==> Non-interactive environment detected; skipping GEMINI_API_KEY prompt."
   fi
 
+  _final_gemini_key="$(_cloudserve_get_env_value ".env" "GEMINI_API_KEY" || true)"
+  _final_google_key="$(_cloudserve_get_env_value ".env" "GOOGLE_API_KEY" || true)"
+
   # 5. Sync Python packages (Chroma, google-genai, jsonschema, pytest, cloudserve CLI)
   echo "==> Syncing Python packages and creating .venv with uv sync --frozen..."
   uv sync --frozen || return 1
@@ -243,16 +246,18 @@ _cloudserve_setup_main() {
   fi
 
   # 7. Verify or re-initialize checked-in vector store and SQLite DB
+  _vector_ready=0
+  _db_ready=0
   if [ "$_reinit_db" -eq 1 ]; then
     echo "==> Re-initializing SQLite DB, output schemas, and Chroma vector store..."
     python scripts/init_runtime_db.py || return 1
+    _db_ready=1
     python scripts/init_output_schemas.py || return 1
     python scripts/init_vector_store.py || return 1
-    _final_gemini_key="$(_cloudserve_get_env_value ".env" "GEMINI_API_KEY" || true)"
-    _final_google_key="$(_cloudserve_get_env_value ".env" "GOOGLE_API_KEY" || true)"
     if [ -n "$_final_gemini_key" ] || [ -n "$_final_google_key" ]; then
       echo "==> API key present; running KB ingestion into Chroma..."
       uv run --env-file .env python scripts/ingest_kb.py || return 1
+      _vector_ready=1
     else
       echo "==> No API key set; skipped scripts/ingest_kb.py (run it after adding GEMINI_API_KEY to .env)."
     fi
@@ -265,6 +270,7 @@ client = chromadb.PersistentClient(path="data/index/chroma")
 col = client.get_collection("cloudserve_kb")
 print(f"    Chroma vector store ready: collection={col.name}, passages={col.count()}")
 ' || return 1
+      _vector_ready=1
     else
       echo "    Warning: Checked-in Chroma vector store not found at data/index/chroma/."
       echo "    Run: uv run python scripts/init_vector_store.py && uv run --env-file .env python scripts/ingest_kb.py"
@@ -278,6 +284,7 @@ tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type=
 print(f"    SQLite runtime DB ready: data/runtime/cloudserve.sqlite3 (tables={tables})")
 conn.close()
 ' || return 1
+      _db_ready=1
     else
       echo "    Warning: Checked-in SQLite database not found at data/runtime/cloudserve.sqlite3."
       echo "    Run: uv run python scripts/init_runtime_db.py"
@@ -293,19 +300,30 @@ conn.close()
   echo "Environment: $_repo_root/.venv"
   echo "Config file: $_repo_root/.env"
   echo ""
-  if ! _cloudserve_is_sourced; then
-    echo "Activate the virtual environment in your shell:"
-    echo "  cd \"$_repo_root\" && source .venv/bin/activate"
-    echo ""
+  if [ "$_vector_ready" -eq 1 ]; then
+    echo "Chroma vector store: ready for use (data/index/chroma/)"
+  else
+    echo "Chroma vector store: NOT READY - see warning above; reinitialize after adding KB articles."
   fi
-  echo "Run the CLI (see available commands):"
-  echo "  uv run cloudserve --help"
+  if [ "$_db_ready" -eq 1 ]; then
+    echo "SQLite runtime DB: ready for use (data/runtime/cloudserve.sqlite3)"
+  else
+    echo "SQLite runtime DB: NOT READY - see warning above; run scripts/init_runtime_db.py."
+  fi
   echo ""
-  echo "Example: process the validation ticket set:"
+  if [ -n "$_final_gemini_key" ] || [ -n "$_final_google_key" ]; then
+    echo "API key configured in .env. Final command to run:"
+  else
+    echo "Add GEMINI_API_KEY or GOOGLE_API_KEY to $_repo_root/.env, then run:"
+  fi
+  echo ""
   echo "  uv run cloudserve run --input data/tickets/validation_tickets.json --skip-draft --skip-draft-review"
   echo ""
-  echo "(Or with .venv activated, simply run:)"
-  echo "  cloudserve run --input data/tickets/validation_tickets.json --skip-draft --skip-draft-review"
+  if ! _cloudserve_is_sourced; then
+    echo "Activate the virtual environment with:"
+    echo "  cd \"$_repo_root\" && source .venv/bin/activate"
+    echo "(then you can drop 'uv run' from the command above)"
+  fi
   echo "========================================================================"
   return 0
 }
